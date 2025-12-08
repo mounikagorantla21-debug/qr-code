@@ -1,159 +1,84 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Student QR Scanner – Attendance View</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scan Student QR Code</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
+    import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-database.js";
 
-<!-- jsQR Library -->
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAEWAXI-ea_s9Mt5Ex3yTumsZr2xnDCY54",
+      authDomain: "qrcode-f7215.firebaseapp.com",
+      databaseURL: "https://qrcode-f7215-default-rtdb.firebaseio.com",
+      projectId: "qrcode-f7215",
+      storageBucket: "qrcode-f7215.appspot.com",
+      messagingSenderId: "442167727446",
+      appId: "1:442167727446:web:f4962eb6e18eaeb038b2f7",
+      measurementId: "G-R6JDRDTG82"
+    };
 
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        padding: 20px;
-        background: #f5f5f5;
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+
+    function fetchStudentByCode(code) {
+      const dbRef = ref(database, 'students');
+      get(dbRef).then((snapshot) => {
+        if (snapshot.exists()) {
+          let found = false;
+          snapshot.forEach((childSnap) => {
+            const student = childSnap.val();
+            if (student.code === code) {
+              found = true;
+              document.getElementById('result').innerHTML = `
+                <h3>Student Details</h3>
+                <p><strong>Name:</strong> ${student.name}</p>
+                <p><strong>Register Number:</strong> ${student.regNo}</p>
+                <p><strong>Branch:</strong> ${student.branch}</p>
+                <p><strong>Code:</strong> ${student.code}</p>
+              `;
+            }
+          });
+          if (!found) {
+            document.getElementById('result').innerHTML = `<p style="color:red;">No student found for this code!</p>`;
+          }
+        } else {
+          document.getElementById('result').innerHTML = `<p style="color:red;">No students in database!</p>`;
+        }
+      }).catch((error) => {
+        console.error(error);
+      });
     }
 
-    h2 {
-        text-align: center;
-    }
+    window.addEventListener('DOMContentLoaded', () => {
+      const html5QrCode = new Html5Qrcode("qr-reader");
+      const qrConfig = { fps: 10, qrbox: 250 };
 
-    #camera {
-        width: 320px;
-        height: 240px;
-        border: 2px solid black;
-        display: block;
-        margin: 20px auto;
-    }
-
-    #resultBox {
-        width: 350px;
-        margin: auto;
-        background: white;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        display: none;
-    }
-
-    .label {
-        font-weight: bold;
-    }
-</style>
+      html5QrCode.start(
+        { facingMode: "environment" },
+        qrConfig,
+        (decodedText) => {
+          // Stop scanning once QR code is detected
+          html5QrCode.stop();
+          fetchStudentByCode(decodedText);
+        },
+        (errorMessage) => {
+          // console.log(`QR Code no read: ${errorMessage}`);
+        }
+      ).catch(err => console.error(err));
+    });
+  </script>
+  <style>
+    body { font-family: Arial; padding:20px; text-align:center; background:#f0f0f0; }
+    #qr-reader { margin: auto; width: 300px; }
+    #result { margin-top:20px; background:#fff; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); max-width:400px; margin-left:auto; margin-right:auto;}
+  </style>
 </head>
 <body>
-
-<h2>Scan Student QR Code</h2>
-
-<video id="camera" autoplay playsinline></video>
-<canvas id="canvas" hidden></canvas>
-
-<p style="text-align:center;" id="scanStatus">Waiting for QR code...</p>
-
-<div id="resultBox">
-    <h3>Student Details:</h3>
-    <p><span class="label">Name:</span> <span id="sName"></span></p>
-    <p><span class="label">Register No:</span> <span id="sRegno"></span></p>
-    <p><span class="label">Branch:</span> <span id="sBranch"></span></p>
-    <p><span class="label">Login Time:</span> <span id="sTime"></span></p>
-</div>
-
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
-
-// Firebase config
-const firebaseConfig = {
-    apiKey: "AIzaSyAEWAXI-ea_s9Mt5Ex3yTumsZr2xnDCY54",
-    authDomain: "qrcode-f7215.firebaseapp.com",
-    projectId: "qrcode-f7215",
-    databaseURL: "https://qrcode-f7215-default-rtdb.firebaseio.com",
-    storageBucket: "qrcode-f7215.firebasestorage.app",
-    messagingSenderId: "442167727446",
-    appId: "1:442167727446:web:f4962eb6e18eaeb038b2f7",
-    measurementId: "G-R6JDRDTG82"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-
-// DOM elements
-const video = document.getElementById("camera");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-const scanStatus = document.getElementById("scanStatus");
-const resultBox = document.getElementById("resultBox");
-
-let scanned = false; // prevent multiple detections
-
-// Access camera
-navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-    .then(stream => {
-        video.srcObject = stream;
-        video.play();
-        requestAnimationFrame(scanLoop);
-    })
-    .catch(err => {
-        scanStatus.innerText = "Camera not accessible!";
-        console.error(err);
-    });
-
-// QR scan loop
-function scanLoop() {
-    if (video.readyState === video.HAVE_ENOUGH_DATA && !scanned) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, canvas.width, canvas.height);
-
-        if (code) {
-            scanned = true; // stop further scanning
-            scanStatus.innerText = "QR detected: " + code.data;
-            processQR(code.data);
-        }
-    }
-    if (!scanned) requestAnimationFrame(scanLoop);
-}
-
-// Process scanned QR
-function processQR(qrValue) {
-    scanStatus.innerText = "Matching QR with database...";
-
-    get(ref(db, "students"))
-        .then(snapshot => {
-            if (!snapshot.exists()) {
-                scanStatus.innerText = "No student records found!";
-                return;
-            }
-
-            let found = false;
-
-            snapshot.forEach(child => {
-                const student = child.val();
-
-                if (student.lastQR === qrValue) {
-                    found = true;
-                    document.getElementById("sName").innerText = student.name;
-                    document.getElementById("sRegno").innerText = student.regno;
-                    document.getElementById("sBranch").innerText = student.branch;
-                    document.getElementById("sTime").innerText = student.loginTime;
-                    resultBox.style.display = "block";
-                }
-            });
-
-            if (!found) {
-                scanStatus.innerText = "No matching student found!";
-            }
-        })
-        .catch(error => {
-            console.error(error);
-            scanStatus.innerText = "Error reading database!";
-        });
-}
-</script>
-
+  <h2>Scan Student QR Code</h2>
+  <div id="qr-reader"></div>
+  <div id="result"></div>
 </body>
 </html>
