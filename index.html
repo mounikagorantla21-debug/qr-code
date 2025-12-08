@@ -45,7 +45,7 @@
 
 <h2>Scan Student QR Code</h2>
 
-<video id="camera" autoplay></video>
+<video id="camera" autoplay playsinline></video>
 <canvas id="canvas" hidden></canvas>
 
 <p style="text-align:center;" id="scanStatus">Waiting for QR code...</p>
@@ -59,12 +59,10 @@
 </div>
 
 <script type="module">
-/* -----------------------------------------
-    Firebase Setup
-------------------------------------------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
 import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
 
+// Firebase config
 const firebaseConfig = {
     apiKey: "AIzaSyAEWAXI-ea_s9Mt5Ex3yTumsZr2xnDCY54",
     authDomain: "qrcode-f7215.firebaseapp.com",
@@ -76,26 +74,34 @@ const firebaseConfig = {
     measurementId: "G-R6JDRDTG82"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-/* -----------------------------------------
-    QR Scanner
-------------------------------------------- */
+// DOM elements
 const video = document.getElementById("camera");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const scanStatus = document.getElementById("scanStatus");
+const resultBox = document.getElementById("resultBox");
 
+let scanned = false; // prevent multiple detections
+
+// Access camera
 navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
     .then(stream => {
         video.srcObject = stream;
         video.play();
-        scanLoop();
+        requestAnimationFrame(scanLoop);
+    })
+    .catch(err => {
+        scanStatus.innerText = "Camera not accessible!";
+        console.error(err);
     });
 
+// QR scan loop
 function scanLoop() {
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    if (video.readyState === video.HAVE_ENOUGH_DATA && !scanned) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -104,25 +110,25 @@ function scanLoop() {
         const code = jsQR(imageData.data, canvas.width, canvas.height);
 
         if (code) {
+            scanned = true; // stop further scanning
             scanStatus.innerText = "QR detected: " + code.data;
             processQR(code.data);
         }
     }
-    requestAnimationFrame(scanLoop);
+    if (!scanned) requestAnimationFrame(scanLoop);
 }
 
-/* -----------------------------------------
-    Process QR → Extract Student Reg No
-------------------------------------------- */
+// Process scanned QR
 function processQR(qrValue) {
-    // QR Format: "QR_1692988282"
-    // We will extract timestamp and find the student who generated it
-
     scanStatus.innerText = "Matching QR with database...";
 
-    // Search all students in Firebase
     get(ref(db, "students"))
         .then(snapshot => {
+            if (!snapshot.exists()) {
+                scanStatus.innerText = "No student records found!";
+                return;
+            }
+
             let found = false;
 
             snapshot.forEach(child => {
@@ -130,19 +136,21 @@ function processQR(qrValue) {
 
                 if (student.lastQR === qrValue) {
                     found = true;
-
                     document.getElementById("sName").innerText = student.name;
                     document.getElementById("sRegno").innerText = student.regno;
                     document.getElementById("sBranch").innerText = student.branch;
                     document.getElementById("sTime").innerText = student.loginTime;
-
-                    document.getElementById("resultBox").style.display = "block";
+                    resultBox.style.display = "block";
                 }
             });
 
             if (!found) {
                 scanStatus.innerText = "No matching student found!";
             }
+        })
+        .catch(error => {
+            console.error(error);
+            scanStatus.innerText = "Error reading database!";
         });
 }
 </script>
