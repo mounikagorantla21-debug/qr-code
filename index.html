@@ -1,84 +1,165 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scan Student QR Code</title>
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
-    import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-database.js";
+<meta charset="UTF-8">
+<title>Student Attendance Scanner</title>
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyAEWAXI-ea_s9Mt5Ex3yTumsZr2xnDCY54",
-      authDomain: "qrcode-f7215.firebaseapp.com",
-      databaseURL: "https://qrcode-f7215-default-rtdb.firebaseio.com",
-      projectId: "qrcode-f7215",
-      storageBucket: "qrcode-f7215.appspot.com",
-      messagingSenderId: "442167727446",
-      appId: "1:442167727446:web:f4962eb6e18eaeb038b2f7",
-      measurementId: "G-R6JDRDTG82"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const database = getDatabase(app);
-
-    function fetchStudentByCode(code) {
-      const dbRef = ref(database, 'students');
-      get(dbRef).then((snapshot) => {
-        if (snapshot.exists()) {
-          let found = false;
-          snapshot.forEach((childSnap) => {
-            const student = childSnap.val();
-            if (student.code === code) {
-              found = true;
-              document.getElementById('result').innerHTML = `
-                <h3>Student Details</h3>
-                <p><strong>Name:</strong> ${student.name}</p>
-                <p><strong>Register Number:</strong> ${student.regNo}</p>
-                <p><strong>Branch:</strong> ${student.branch}</p>
-                <p><strong>Code:</strong> ${student.code}</p>
-              `;
-            }
-          });
-          if (!found) {
-            document.getElementById('result').innerHTML = `<p style="color:red;">No student found for this code!</p>`;
-          }
-        } else {
-          document.getElementById('result').innerHTML = `<p style="color:red;">No students in database!</p>`;
-        }
-      }).catch((error) => {
-        console.error(error);
-      });
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f2f2f2;
+        padding: 20px;
+        display: flex;
+        justify-content: center;
     }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      const html5QrCode = new Html5Qrcode("qr-reader");
-      const qrConfig = { fps: 10, qrbox: 250 };
-
-      html5QrCode.start(
-        { facingMode: "environment" },
-        qrConfig,
-        (decodedText) => {
-          // Stop scanning once QR code is detected
-          html5QrCode.stop();
-          fetchStudentByCode(decodedText);
-        },
-        (errorMessage) => {
-          // console.log(`QR Code no read: ${errorMessage}`);
-        }
-      ).catch(err => console.error(err));
-    });
-  </script>
-  <style>
-    body { font-family: Arial; padding:20px; text-align:center; background:#f0f0f0; }
-    #qr-reader { margin: auto; width: 300px; }
-    #result { margin-top:20px; background:#fff; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); max-width:400px; margin-left:auto; margin-right:auto;}
-  </style>
+    .container {
+        background: white;
+        padding: 20px;
+        width: 400px;
+        border-radius: 8px;
+        box-shadow: 0px 0px 10px #999;
+    }
+    input, button {
+        width: 100%;
+        padding: 10px;
+        margin-top: 10px;
+    }
+    button {
+        background: #0066cc;
+        color: white;
+        border: none;
+        cursor: pointer;
+    }
+    #reader {
+        width: 100%;
+        margin-top: 20px;
+        display: none;
+    }
+    #msg {
+        margin-top: 15px;
+        font-weight: bold;
+        text-align: center;
+        font-size: 18px;
+    }
+</style>
 </head>
 <body>
-  <h2>Scan Student QR Code</h2>
-  <div id="qr-reader"></div>
-  <div id="result"></div>
+
+<div class="container">
+
+    <!-- LOGIN -->
+    <div id="loginBox">
+        <h2>Student Login</h2>
+        <input id="studentName" placeholder="Enter Name">
+        <input id="studentId" placeholder="Student ID">
+        <button onclick="login()">Login</button>
+    </div>
+
+    <!-- SCAN SECTION -->
+    <div id="scanSection" style="display:none;">
+        <h2>Scan QR Code</h2>
+        <button onclick="startScan()">Start Scanner</button>
+
+        <div id="reader"></div>
+
+        <div id="msg"></div>
+    </div>
+
+</div>
+
+<!-- Modern QR Scanner Library -->
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getDatabase, ref, onValue, push, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCXQ6k7klI-EJimsssS7Ryr9fyUMzrdtuE",
+  authDomain: "qrcode-d41de.firebaseapp.com",
+  databaseURL: "https://qrcode-d41de-default-rtdb.firebaseio.com",
+  projectId: "qrcode-d41de",
+  storageBucket: "qrcode-d41de.firebasestorage.app",
+  messagingSenderId: "354050671338",
+  appId: "1:354050671338:web:4aab0d12b3e86a74dfcd93",
+  measurementId: "G-4DVHTNY6F7"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let studentName = "";
+let studentId = "";
+
+// Login function
+window.login = function () {
+    studentName = document.getElementById("studentName").value;
+    studentId = document.getElementById("studentId").value;
+
+    if (!studentName || !studentId) {
+        alert("Enter your name & ID!");
+        return;
+    }
+
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("scanSection").style.display = "block";
+};
+
+// Start modern QR scanner
+window.startScan = function () {
+    document.getElementById("reader").style.display = "block";
+
+    const scanner = new Html5Qrcode("reader");
+
+    scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+
+        // SUCCESS: QR Code Scanned
+        qrMessage => {
+            verifyCode(qrMessage);
+            scanner.stop();
+        },
+
+        // IGNORE scan errors
+        error => { }
+    ).catch(err => {
+        alert("Camera Error: " + err);
+    });
+};
+
+// Compare scanned QR with Firebase latest code
+function verifyCode(scannedCode) {
+    const codeRef = ref(db, "codes/latest");
+
+    onValue(codeRef, snapshot => {
+        const data = snapshot.val();
+        if (!data) return;
+
+        if (String(data.value) === String(scannedCode)) {
+            document.getElementById("msg").textContent = "✔ Attendance Successful!";
+            document.getElementById("msg").style.color = "green";
+            saveAttendance();
+        } else {
+            document.getElementById("msg").textContent = "❌ Invalid QR Code!";
+            document.getElementById("msg").style.color = "red";
+        }
+    });
+}
+
+// Save attendance
+function saveAttendance() {
+    const recordRef = push(ref(db, "attendance"));
+
+    set(recordRef, {
+        name: studentName,
+        id: studentId,
+        time: new Date().toLocaleString(),
+        status: "Present"
+    });
+}
+</script>
+
 </body>
 </html>
