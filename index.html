@@ -1,164 +1,111 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Student Attendance Scanner</title>
-
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #f2f2f2;
-        padding: 20px;
-        display: flex;
-        justify-content: center;
-    }
-    .container {
-        background: white;
-        padding: 20px;
-        width: 400px;
-        border-radius: 8px;
-        box-shadow: 0px 0px 10px #999;
-    }
-    input, button {
-        width: 100%;
-        padding: 10px;
-        margin-top: 10px;
-    }
-    button {
-        background: #0066cc;
-        color: white;
-        border: none;
-        cursor: pointer;
-    }
-    #reader {
-        width: 100%;
-        margin-top: 20px;
-        display: none;
-    }
-    #msg {
-        margin-top: 15px;
-        font-weight: bold;
-        text-align: center;
-        font-size: 18px;
-    }
-</style>
+  <meta charset="UTF-8">
+  <title>Student Attendance Scanner</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f2f2f2; padding: 20px; display: flex; justify-content: center; }
+    .container { background: white; padding: 20px; width: 400px; border-radius: 8px; box-shadow: 0px 0px 10px #999; }
+    input, button { width: 100%; padding: 10px; margin-top: 10px; }
+    button { background: #0066cc; color: white; border: none; cursor: pointer; }
+    #reader { width: 100%; margin-top: 20px; display: none; }
+    #msg { margin-top: 15px; font-weight: bold; text-align: center; font-size: 18px; }
+  </style>
 </head>
 <body>
 
 <div class="container">
+  <div id="loginBox">
+    <h2>Student Login</h2>
+    <input id="studentName" placeholder="Enter Name">
+    <input id="studentId" placeholder="Student ID">
+    <button onclick="login()">Login</button>
+  </div>
 
-    <!-- LOGIN -->
-    <div id="loginBox">
-        <h2>Student Login</h2>
-        <input id="studentName" placeholder="Enter Name">
-        <input id="studentId" placeholder="Student ID">
-        <button onclick="login()">Login</button>
-    </div>
-
-    <!-- SCAN SECTION -->
-    <div id="scanSection" style="display:none;">
-        <h2>Scan QR Code</h2>
-        <button onclick="startScan()">Start Scanner</button>
-
-        <div id="reader"></div>
-
-        <div id="msg"></div>
-    </div>
-
+  <div id="scanSection" style="display:none;">
+    <h2>Scan QR Code</h2>
+    <button onclick="startScan()">Start Scanner</button>
+    <div id="reader"></div>
+    <div id="msg"></div>
+  </div>
 </div>
 
-<!-- Modern QR Scanner Library -->
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-
-<!-- Firebase -->
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getDatabase, ref, onValue, push, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getDatabase, ref, onValue, push, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCXQ6k7klI-EJimsssS7Ryr9fyUMzrdtuE",
-  authDomain: "qrcode-d41de.firebaseapp.com",
-  databaseURL: "https://qrcode-d41de-default-rtdb.firebaseio.com",
-  projectId: "qrcode-d41de",
-  storageBucket: "qrcode-d41de.firebasestorage.app",
-  messagingSenderId: "354050671338",
-  appId: "1:354050671338:web:4aab0d12b3e86a74dfcd93",
-  measurementId: "G-4DVHTNY6F7"
-};
+  const firebaseConfig = {
+    apiKey: "...",
+    authDomain: "...",
+    databaseURL: "https://<YOUR_DB_NAME>.firebaseio.com",
+    projectId: "...",
+    storageBucket: "...",
+    messagingSenderId: "...",
+    appId: "..."
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+  let studentName = "";
+  let studentId = "";
 
-let studentName = "";
-let studentId = "";
-
-// Login function
-window.login = function () {
+  window.login = function() {
     studentName = document.getElementById("studentName").value;
     studentId = document.getElementById("studentId").value;
-
     if (!studentName || !studentId) {
-        alert("Enter your name & ID!");
-        return;
+      alert("Enter both name and ID!");
+      return;
     }
-
     document.getElementById("loginBox").style.display = "none";
     document.getElementById("scanSection").style.display = "block";
-};
+  };
 
-// Start modern QR scanner
-window.startScan = function () {
+  window.startScan = function() {
     document.getElementById("reader").style.display = "block";
-
     const scanner = new Html5Qrcode("reader");
-
     scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-
-        // SUCCESS: QR Code Scanned
-        qrMessage => {
-            verifyCode(qrMessage);
-            scanner.stop();
-        },
-
-        // IGNORE scan errors
-        error => { }
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 250 },
+      qrMessage => {
+        verifyCode(qrMessage);
+        scanner.stop();
+      },
+      error => { /* ignore scan errors */ }
     ).catch(err => {
-        alert("Camera Error: " + err);
+      alert("Camera Error: " + err);
     });
-};
+  };
 
-// Compare scanned QR with Firebase latest code
-function verifyCode(scannedCode) {
+  function verifyCode(scannedCode) {
     const codeRef = ref(db, "codes/latest");
+    onValue(codeRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        document.getElementById("msg").textContent = "⚠ No active code!";
+        document.getElementById("msg").style.color = "orange";
+        return;
+      }
+      if (String(data.value) === String(scannedCode)) {
+        document.getElementById("msg").textContent = "✔ Attendance Successful!";
+        document.getElementById("msg").style.color = "green";
+        saveAttendance();
+      } else {
+        document.getElementById("msg").textContent = "❌ Invalid QR Code!";
+        document.getElementById("msg").style.color = "red";
+      }
+    }, { onlyOnce: true });
+  }
 
-    onValue(codeRef, snapshot => {
-        const data = snapshot.val();
-        if (!data) return;
-
-        if (String(data.value) === String(scannedCode)) {
-            document.getElementById("msg").textContent = "✔ Attendance Successful!";
-            document.getElementById("msg").style.color = "green";
-            saveAttendance();
-        } else {
-            document.getElementById("msg").textContent = "❌ Invalid QR Code!";
-            document.getElementById("msg").style.color = "red";
-        }
-    });
-}
-
-// Save attendance
-function saveAttendance() {
+  function saveAttendance() {
     const recordRef = push(ref(db, "attendance"));
-
     set(recordRef, {
-        name: studentName,
-        id: studentId,
-        time: new Date().toLocaleString(),
-        status: "Present"
+      name: studentName,
+      id: studentId,
+      time: new Date().toLocaleString(),
+      status: "Present"
     });
-}
+  }
 </script>
 
 </body>
