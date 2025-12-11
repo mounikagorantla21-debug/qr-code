@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>QR Scanner</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <style>
+    body { font-family: Arial; padding: 15px; }
+    #reader { width: 100%; max-width: 400px; height: 350px; margin-top: 15px; }
+    #msg { font-size: 20px; font-weight: bold; margin-top: 15px; }
+  </style>
+
+  <!-- Correct version of html5-qrcode -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+</head>
+
+<body>
+  <h2>Scan QR Code</h2>
+
+  <div id="reader"></div>
+  <div id="msg"></div>
+
+  <button onclick="stopScanner()" style="margin-top:10px;">Stop Scanner</button>
+
+<script>
+  /* ------------------ FIREBASE --------------------- */
+  const firebaseConfig = {
+    apiKey: "AIzaSyDeLqOuca8tge4tOpgD7LKPIFubLew6ljQ",
+    authDomain: "attendance-management-sy-da7cd.firebaseapp.com",
+    databaseURL: "https://attendance-management-sy-da7cd-default-rtdb.firebaseio.com",
+    projectId: "attendance-management-sy-da7cd",
+    storageBucket: "attendance-management-sy-da7cd.firebasestorage.app",
+    messagingSenderId: "222467905728",
+    appId: "1:222467905728:web:e3a6b729c7d8b813497525",
+    measurementId: "G-H6R4YFBNMB"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  const studentName = localStorage.getItem("student_name");
+  const studentRoll = localStorage.getItem("student_roll");
+
+  const msg = document.getElementById('msg');
+  let qrScanner;
+
+  /* ------------------ START SCANNER --------------------- */
+  function startScanner() {
+    qrScanner = new Html5Qrcode("reader");
+
+    qrScanner.start(
+      { facingMode: "environment" },   // ← FORCE BACK CAMERA
+      {
+        fps: 10,
+        qrbox: 250
+      },
+      async (decodedText) => {
+        msg.innerHTML = "QR Detected: " + decodedText;
+
+        const snap = await db.ref("attendance/faculty").get();
+        const all = snap.exists() ? snap.val() : {};
+        let matchFaculty = null;
+
+        for (let fid in all) {
+          const f = all[fid];
+          if (f?.activeQR?.token && Date.now() < f.activeQR.expiry) {
+            if (decodedText === f.activeQR.token) {
+              matchFaculty = fid;
+              break;
+            }
+          }
+        }
+
+        if (!matchFaculty) {
+          msg.innerHTML = "❌ QR Invalid Or Expired";
+          return;
+        }
+
+        const stRef = db.ref("attendance/faculty/" + matchFaculty + "/students");
+        const dup = await stRef.orderByChild("roll").equalTo(studentRoll).get();
+
+        if (dup.exists()) {
+          msg.innerHTML = "✔ You Already Submitted Attendance";
+          stopScanner();
+          return;
+        }
+
+        await stRef.push({
+          roll: studentRoll,
+          name: studentName,
+          time: new Date().toLocaleTimeString(),
+          method: "QR"
+        });
+
+        msg.innerHTML = "✔ Attendance Submitted Successfully!";
+        stopScanner();
+      }
+    ).catch(err => {
+      msg.innerHTML = "Camera Error: " + err;
+    });
+  }
+
+  /* ------------------ STOP SCANNER --------------------- */
+  function stopScanner() {
+    if (qrScanner) {
+      qrScanner.stop().then(() => {
+        msg.innerHTML = "Scanner Stopped";
+      });
+    }
+  }
+
+  /* ------------------ START ON PAGE OPEN --------------------- */
+  startScanner();
+</script>
+
+</body>
+</html>
+
